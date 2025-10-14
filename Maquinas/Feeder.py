@@ -1,4 +1,4 @@
-from Maquinas import Maquina_base
+from Maquinas.Maquina_base import Maquina_base
 import json
 import time
 import threading
@@ -7,16 +7,22 @@ class Feeder(Maquina_base):
 
     def __init__(self,nome,broker,port,client_id,nivelEstoque,status="ativo"):
         super().__init__(nome, broker, port,client_id,status)
-        self.velocidade = 2 #segundos entre cada garrafa
+        self.velocidade = 2 
         self.nivelEstoque = nivelEstoque
         self.estoqueMinimo = 3
         self.garrafas_produzidas = 0
         self.produzindo = False
 
         self.topico_comando = "factory/feeder/in"
+        self.topico_estoque_status = "factory/feeder/status" 
         self.topico_enviar = "factory/mixer/in"
+        self.topico_filler = "factory/filler/in"
         self.topico_alerta = "factory/controlador/in"
 
+    def iniciar(self):
+        self.conectar_broker()
+        self.assinar_topico(self.topico_comando)
+        self.log("🧪 Feeder pronto — inscrito no tópico de comandos.")
 
     def operar(self):
         
@@ -56,9 +62,18 @@ class Feeder(Maquina_base):
                 "evento": "garrafa_pronta",
                 "id": self.garrafas_produzidas
             })
-            self.publicar(self.topico_enviar, msg)
+             
+            status_msg = json.dumps( {
+                "origem": "Feeder",
+                "evento": "status_estoque",
+                "nivelEstoque": self.nivelEstoque
+            })
 
-            self.log(f"🧴 Garrafa #{self.garrafas_produzidas} enviada. Estoque restante: {self.nivelEstoque}")
+            self.publicar(self.topico_filler, msg)
+            self.publicar(self.topico_estoque_status, status_msg)
+
+            self.log(f"🧃✅ Garrafa #{self.garrafas_produzidas} enviada. Estoque restante: {self.nivelEstoque}")
+            time.sleep(3)
 
             if self.nivelEstoque <= self.estoqueMinimo:
                 self.alertar_controlador("estoque_baixo")
@@ -67,7 +82,7 @@ class Feeder(Maquina_base):
 
     def repor_estoque(self,valor=10):
         self.nivelEstoque += valor
-        self.log(f"📦 Estoque reposto em +{valor}. Total: {self.nivelEstoque}")
+        self.log(f"🧃✅ Estoque reposto em +{valor}. Total: {self.nivelEstoque}")
     
     def estoque_atual(self):
         return self.nivelEstoque
@@ -90,6 +105,7 @@ class Feeder(Maquina_base):
                 self.repor_estoque(qtd)
             case _:
                 self.log(f"⚠️ Comando desconhecido: {comando}")
+
 
     def alertar_controlador(self, tipo_alerta):
         msg = json.dumps({
