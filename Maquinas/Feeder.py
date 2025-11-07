@@ -1,4 +1,4 @@
-from Maquinas.Maquina_base import Maquina_base
+from Maquina_base import Maquina_base
 import json
 import time
 import threading
@@ -16,13 +16,21 @@ class Feeder(Maquina_base):
         self.topico_comando = "factory/feeder/in"
         self.topico_estoque_status = "factory/feeder/status" 
         self.topico_enviar = "factory/mixer/in"
+        self.topico_servidor = "factory/servidor/in"
         self.topico_filler = "factory/filler/in"
         self.topico_alerta = "factory/controlador/in"
 
     def iniciar(self):
         self.conectar_broker()
         self.assinar_topico(self.topico_comando)
+        self.client.loop_start()
+
+        for _ in range(10):
+            if self.client.is_connected():
+                break
+            time.sleep(0.5)
         self.log("🧪 Feeder pronto — inscrito no tópico de comandos.")
+        self.publicar(self.topico_servidor, "[FEEDER]-> INICIEI!")
 
     def operar(self):
         
@@ -49,6 +57,12 @@ class Feeder(Maquina_base):
                 time.sleep(1)
                 continue
 
+            
+            if not self.client.is_connected():
+                self.log("⚠️ Cliente MQTT desconectado! Aguardando reconexão automática...")
+                time.sleep(2)
+                continue  
+
             if self.nivelEstoque <= 0:
                 self.log("⚠️ Estoque de garrafas vazio, parando produção.")
                 self.alertar_controlador("estoque_vazio")
@@ -62,8 +76,8 @@ class Feeder(Maquina_base):
                 "evento": "garrafa_pronta",
                 "id": self.garrafas_produzidas
             })
-             
-            status_msg = json.dumps( {
+
+            status_msg = json.dumps({
                 "origem": "Feeder",
                 "evento": "status_estoque",
                 "nivelEstoque": self.nivelEstoque
@@ -80,6 +94,7 @@ class Feeder(Maquina_base):
 
             time.sleep(self.velocidade)
 
+
     def repor_estoque(self,valor=10):
         self.nivelEstoque += valor
         self.log(f"🧃✅ Estoque reposto em +{valor}. Total: {self.nivelEstoque}")
@@ -87,10 +102,21 @@ class Feeder(Maquina_base):
     def estoque_atual(self):
         return self.nivelEstoque
     
+    def reiniciar(self):
+        self.parar_operacao()
+        time.sleep(0.5)
+        self.nivelEstoque = 10
+        self.garrafas_produzidas = 0
+        self.status = "ativo"
+        self.produzindo = False
+        self.log("🔁 Feeder reiniciado — estoque restaurado e pronto para operar.")
+
+
     def processar_mensagem(self, mensagem):
         try:
             data = json.loads(mensagem)
             comando = data.get("command", "").upper()
+            self.publicar(self.topico_servidor, "RECEBI UMA MENSAGEM!")
         except json.JSONDecodeError:
             self.log("❌ Mensagem inválida (não é JSON).")
             return
@@ -98,11 +124,14 @@ class Feeder(Maquina_base):
         match comando:
             case "OPERAR":
                 self.operar()
+
             case "PARAR":
                 self.parar_operacao()               
             case "REPOR":
                 qtd = int(data.get("quantidade", 0))
                 self.repor_estoque(qtd)
+            case "REINICIAR":
+                self.reiniciar()
             case _:
                 self.log(f"⚠️ Comando desconhecido: {comando}")
 
@@ -115,3 +144,9 @@ class Feeder(Maquina_base):
         })
         self.publicar(self.topico_alerta, msg)
                 
+if __name__ == "__main__":
+    feeder = Feeder("Feeder","broker.emqx.io",1883,"Feeder",5)
+    feeder.iniciar()
+
+    while True:
+        time.sleep(1)

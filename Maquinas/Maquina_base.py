@@ -1,15 +1,11 @@
-
-import random
 from paho.mqtt import client as mqtt_client
 from paho.mqtt.enums import CallbackAPIVersion
-
-
 class Maquina_base:
 
     def __init__(self, nome, broker, port,client_id,status):
         self.nome = nome          
-        self.broker = broker      
-        self.port = port         
+        self.broker = "broker.emqx.io"     
+        self.port = 1883         
         self.client = None        
         self.client_id = client_id
         self.status = status
@@ -17,34 +13,48 @@ class Maquina_base:
     def conectar_broker(self):
         def on_connect(client, userdata, flags, reason_code, properties):
             if reason_code == 0:
-                print("Conectado ao MQTT Broker!")
+                print("✅ Conectado ao MQTT Broker!")
             else:
-                print(f"Falha ao conectar, razão:  {reason_code}")
+                print(f"⚠️ Falha na conexão ao MQTT Broker, código: {reason_code}")
+
+        def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+            if reason_code != 0:
+                print(f"⚠️ Conexão MQTT perdida! (código {reason_code}) — tentando reconectar...")
+
+        self.client = mqtt_client.Client(callback_api_version=CallbackAPIVersion.VERSION2,client_id=self.client_id,clean_session=False)
+
         
-        self.client = mqtt_client.Client(callback_api_version=CallbackAPIVersion.VERSION2,
-                                client_id=self.client_id)
         self.client.on_connect = on_connect
+        self.client.on_disconnect = on_disconnect
+
+        self.client.reconnect_delay_set(min_delay=1, max_delay=30)
+
         self.client.connect(self.broker, self.port)
-        self.client.loop_start() 
+
         return self.client
-        
+            
     def desconectar(self):
         self.client.loop_stop()
         self.client.disconnect()
 
     def publicar(self, topico, mensagem):
         if self.client is None:
-            print("⚠️ Cliente MQTT não conectado.")
+            print("⚠️ Cliente MQTT não inicializado.")
             return
-        info = self.client.publish(topico, mensagem, qos=0)
+
+        if not self.client.is_connected():
+            print(f"[{self.client_id}] ⚠️ Cliente desconectado — publicação adiada.")
+            return
+
         try:
+            info = self.client.publish(topico, mensagem, qos=0)
             info.wait_for_publish(timeout=1)
-        except Exception:
-            pass
-        if info.is_published():
-            print(f"[{self.client_id}] 📤 Enviou: `{mensagem}` ao tópico `{topico}`")
-        else:
-            print(f"[{self.client_id}] ⚠️ Falha ao publicar mensagem.")
+            if info.is_published():
+                print(f"[{self.client_id}] 📤 Enviou: `{mensagem}` ao tópico `{topico}`")
+            else:
+                print(f"[{self.client_id}] ⚠️ Falha ao publicar mensagem.")
+        except Exception as e:
+            print(f"[{self.client_id}] ❌ Erro ao publicar: {e}")
 
 
     def assinar_topico(self, topico):

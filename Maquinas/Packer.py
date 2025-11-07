@@ -1,4 +1,4 @@
-from Maquinas.Maquina_base import Maquina_base
+from Maquina_base import Maquina_base
 import json
 import time
 import threading
@@ -8,24 +8,46 @@ class Packer(Maquina_base):
     def __init__(self, nome, broker, port, client_id,status="ativo"):
         super().__init__(nome, broker, port, client_id, status)
 
-    # Controle
         self.fila_garrafas = queue.Queue()
-        self.garrafas_por_caixa = 10
+        self.garrafas_por_caixa = 5
         self.caixas_empacotadas = 0
         self.produzindo = False
 
-    # Tópicos
         self.topico_receber_filler = "factory/packer/in" 
         self.topico_alerta = "factory/controlador/in"
+        self.topico_servidor = "factory/servidor/in"
 
 
 
     def iniciar(self):
         self.conectar_broker()
+
+        if hasattr(self, "client"):
+            self.client._keepalive = 30 
+            self.client.reconnect_delay_set(min_delay=1, max_delay=10)
+        else:
+            self.log("❌ Erro: client MQTT não inicializado pela Maquina_base.")
+            return
+
         self.assinar_topico(self.topico_receber_filler)
-        self.log("🧪 Packer pronto — inscrito nos tópicos do filler.")
+        self.client.loop_start()
 
+        for _ in range(10):
+            if self.client.is_connected():
+                break
+            time.sleep(0.5)
+        self.log("🧪 Packer conectado e monitorando filler.")
+        self.publicar(self.topico_servidor, "[PACKER]-> INICIEI!")
 
+        threading.Thread(target=self.manter_vivo, daemon=True).start()
+
+    def manter_vivo(self):
+        while True:
+            try:
+                self.publicar(self.topico_servidor, "[PACKER]-> Esperando")
+            except:
+                pass
+            time.sleep(20)
 
     def operar(self):
         if self.produzindo:
@@ -56,7 +78,7 @@ class Packer(Maquina_base):
                 
                 self.caixas_empacotadas += 1
                 self.log(f"📦✅ Caixa #{self.caixas_empacotadas} empacotada com {len(garrafas)} garrafas.")
-                
+                self.publicar(self.topico_servidor, f"[Packer]-> 📦✅ Caixa #{self.caixas_empacotadas} empacotada com {len(garrafas)} garrafas. ")
                 
                 time.sleep(2)
 
@@ -89,3 +111,10 @@ class Packer(Maquina_base):
     def alertar_controlador(self, tipo_alerta):
         payload = {"origem": "Packer", "alerta": tipo_alerta}
         self.publicar(self.topico_alerta, json.dumps(payload))
+
+if __name__ == "__main__":
+    packer = Packer("Packer","broker.emqx.io",1883,"Packer")
+    packer.iniciar()
+
+    while True:
+        time.sleep(1)
