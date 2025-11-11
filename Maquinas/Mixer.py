@@ -52,6 +52,7 @@ class Mixer(Maquina_base):
             elif cmd == "PARAR":
                 self.produzindo = False
                 self.log("🔴 Mixer parado manualmente.")
+                self.publicar(self.topico_servidor,"[Mixer] ->🔴 Maquina Parando Operação") 
             return
 
         if origem == "Filler" and evento == "reservatorio":
@@ -80,7 +81,7 @@ class Mixer(Maquina_base):
 
 
 if __name__ == "__main__":
-    mixer = Mixer("Mixer", "broker.emqx.io", 1883, "Mixer")
+    mixer = Mixer("Mixer", "localhost", 1883, "Mixer")
     mixer.iniciar()
     while True:
         time.sleep(1)

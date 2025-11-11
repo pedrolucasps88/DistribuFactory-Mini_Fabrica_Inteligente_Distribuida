@@ -151,6 +151,7 @@ class Filler(Maquina_base):
                     self.operar()
                 case "PARAR":
                     self.parar_operacao()
+                    self.publicar(self.topico_servidor,"[Filler] ->🔴 Maquina Parando Operação")
                 case _:
                     self.log(f"⚠️ Comando desconhecido: {comando}")
 
@@ -164,7 +165,7 @@ class Filler(Maquina_base):
 
 
 if __name__ == "__main__":
-    filler = Filler("Filler","broker.emqx.io",1883,"3")
+    filler = Filler("Filler","localhost",1883,"3")
     filler.iniciar()
 
     while True:

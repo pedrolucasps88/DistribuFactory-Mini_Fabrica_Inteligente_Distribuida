@@ -4,7 +4,7 @@ class Maquina_base:
 
     def __init__(self, nome, broker, port,client_id,status):
         self.nome = nome          
-        self.broker = "broker.emqx.io"     
+        self.broker = "localhost"     
         self.port = 1883         
         self.client = None        
         self.client_id = client_id

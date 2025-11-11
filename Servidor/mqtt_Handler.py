@@ -2,7 +2,7 @@ import paho.mqtt.client as mqtt
 import json
 
 class MQTTHandler:
-    def __init__(self, broker='broker.emqx.io', port=1883, on_message_callback=None):
+    def __init__(self, broker='localhost', port=1883, on_message_callback=None):
         self.client = mqtt.Client(client_id="servidor", clean_session=True)
         self.client.on_connect = self.on_connect
         self.client.on_message = on_message_callback

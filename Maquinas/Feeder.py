@@ -67,6 +67,7 @@ class Feeder(Maquina_base):
                 self.log("⚠️ Estoque de garrafas vazio, parando produção.")
                 self.alertar_controlador("estoque_vazio")
                 self.produzindo = False
+                self.publicar(self.topico_servidor,"[Feeder] -> Desligando por falta de estoque⚠️")
                 break
 
             self.nivelEstoque -= 1
@@ -85,6 +86,7 @@ class Feeder(Maquina_base):
 
             self.publicar(self.topico_filler, msg)
             self.publicar(self.topico_estoque_status, status_msg)
+            self.publicar(self.topico_servidor,"[Feeder]-> Garrafa Pronta indo para Filler")
 
             self.log(f"🧃✅ Garrafa #{self.garrafas_produzidas} enviada. Estoque restante: {self.nivelEstoque}")
             time.sleep(3)
@@ -116,7 +118,6 @@ class Feeder(Maquina_base):
         try:
             data = json.loads(mensagem)
             comando = data.get("command", "").upper()
-            self.publicar(self.topico_servidor, "RECEBI UMA MENSAGEM!")
         except json.JSONDecodeError:
             self.log("❌ Mensagem inválida (não é JSON).")
             return
@@ -126,7 +127,8 @@ class Feeder(Maquina_base):
                 self.operar()
 
             case "PARAR":
-                self.parar_operacao()               
+                self.parar_operacao()  
+                self.publicar(self.topico_servidor,"[Feeder] ->🔴 Maquina Parando Operação")             
             case "REPOR":
                 qtd = int(data.get("quantidade", 0))
                 self.repor_estoque(qtd)
@@ -145,7 +147,7 @@ class Feeder(Maquina_base):
         self.publicar(self.topico_alerta, msg)
                 
 if __name__ == "__main__":
-    feeder = Feeder("Feeder","broker.emqx.io",1883,"Feeder",5)
+    feeder = Feeder("Feeder","localhost",1883,"Feeder",5)
     feeder.iniciar()
 
     while True:

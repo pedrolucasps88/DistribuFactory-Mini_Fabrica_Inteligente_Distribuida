@@ -103,6 +103,7 @@ class Packer(Maquina_base):
             self.receber_garrafa(data)
         elif data.get("command", "").upper() == "PARAR":
             self.parar_operacao()
+            self.publicar(self.topico_servidor,"[Packer] ->🔴 Maquina Parando Operação")
         elif data.get("command", "").upper() == "OPERAR":
             self.operar()
         else:
@@ -113,7 +114,7 @@ class Packer(Maquina_base):
         self.publicar(self.topico_alerta, json.dumps(payload))
 
 if __name__ == "__main__":
-    packer = Packer("Packer","broker.emqx.io",1883,"Packer")
+    packer = Packer("Packer","localhost",1883,"Packer")
     packer.iniciar()
 
     while True:
