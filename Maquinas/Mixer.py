@@ -10,7 +10,7 @@ class Mixer(Maquina_base):
         self.produzindo = False
         self.nivel_filler = 0.0
         self.limite_minimo_filler = 2.0      
-        self.quantidade_envio = 10.0         
+        self.quantidade_envio = 2.5         
         self.tempo_producao = 4.0            
         self.feeder_estoque = 50             
 

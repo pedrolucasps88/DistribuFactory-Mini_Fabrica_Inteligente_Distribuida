@@ -1,12 +1,11 @@
 import socket
 import json
 import threading
-import time
-
 from tkinter import *
 from tkinter import ttk
 from queue import Queue, Empty
-from tkinter import PhotoImage
+from PIL import Image, ImageTk
+
 
 class ControladorTCP:
     def __init__(self, gui_callback, host='127.0.0.1', port=9000):
@@ -60,12 +59,20 @@ class InterfaceControlador:
         self.queue_event = Queue()
         self.garrafas = []
         self.para_Empacotar = []
+        self.caixas = []
+        self.caixa_img = PhotoImage(file="assets/pacote.png")
         self.gotas = []
         self.Contador = {"garrafas_totais": 0, "pacotes_totais": 0 , "emergencias_totais":0, "Mixer_enviou":0}
         self.ta_emergencia = False
         self.garrafa_imagens = {
             "empty": PhotoImage(file="assets\garrafa_vazia.png"),
             "full": PhotoImage(file="assets\garrafa_cheia.png"),
+        }
+        self.maquinas_imagens = {
+            "feeder": self.carregar_imagem_redimensionada("assets/Feeder_img.png"),
+            "mixer": self.carregar_imagem_redimensionada("assets/Mixer_img.png"),
+            "filler": self.carregar_imagem_redimensionada("assets/Filler_img.png"),
+            "packer": self.carregar_imagem_redimensionada("assets/Packer_img.png"),
         }
         self.alarme_imagem = PhotoImage(file="assets\\alarm.png")
         self.alarme_widget = None
@@ -87,7 +94,7 @@ class InterfaceControlador:
         bottom_frame.pack(side=BOTTOM, fill=X)
         
         ctrl_frame = Frame(bottom_frame, bg="#121212")
-        ctrl_frame.pack(side=LEFT, padx=20, pady=10)
+        ctrl_frame.pack(side=LEFT, padx=80, pady=10)
 
         Label(ctrl_frame, text="Controles", bg="#121212", fg="#e6edf3",
             font=("Segoe UI", 14, "bold")).pack(anchor="w")
@@ -97,27 +104,29 @@ class InterfaceControlador:
 
         Button(ctrl_frame, text="🔹 Ligar Feeder", command=lambda: self._cmd("feeder", "OPERAR")).pack(fill=X, pady=2)
         Button(ctrl_frame, text="🔹 Repor Feeder", command=self._repor_feeder).pack(fill=X, pady=2)
-        Button(ctrl_frame, text="🔹 Ligar Filler", command=lambda: self._cmd("filler", "OPERAR")).pack(fill=X, pady=2)
-        Button(ctrl_frame, text="🔹 Ligar Packer", command=lambda: self._cmd("packer", "OPERAR")).pack(fill=X, pady=2)
-        Button(ctrl_frame, text="⚡ Ligar Tudo", command=self._ligar_tudo).pack(fill=X, pady=5)
-        Button(ctrl_frame, text="🆘 Emergência", bg="#b91c1c", fg="white", command=self._emergencia).pack(fill=X, pady=5)
+        Button(ctrl_frame, text="⚡ Ligar Tudo", command=self._ligar_tudo).pack(fill=X, pady=2)
+        Button(ctrl_frame, text="🆘 Emergência", bg="#b91c1c", fg="white", command=self._emergencia).pack(fill=X, pady=2)
 
         status_frame = Frame(bottom_frame, bg="#121212")
-        status_frame.pack(side=RIGHT, fill=BOTH, expand=True, padx=20, pady=10)
+        status_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=20, pady=10)
 
         logs_status_frame = Frame(status_frame, bg="#121212")
-        logs_status_frame.pack(fill=BOTH, expand=True)
+        logs_status_frame.pack(fill=X)
 
-        log_frame = Frame(logs_status_frame, bg="#121212")
-        log_frame.pack(side=LEFT, fill=BOTH, expand=True)
 
-        self.log_text = Text(log_frame, bg="#1e1e1e", fg="#a3a3a3", height=8,  # era 6
+        log_frame = Frame(logs_status_frame, bg="#121212", width=750)
+        log_frame.pack(side=LEFT, fill=Y)
+        
+        log_frame.pack_propagate(False)
+
+        self.log_text = Text(log_frame, bg="#1e1e1e", fg="#a3a3a3", height=8,
                             relief=FLAT, wrap=WORD)
         self.log_text.pack(fill=BOTH, expand=True, pady=(10, 0))
         self.log_text.insert(END, "🔌 Aguardando conexão...\n")
 
         status_info_frame = Frame(logs_status_frame, bg="#121212", width=200)
-        status_info_frame.pack(side=RIGHT, fill=Y, padx=(10, 0))
+        status_info_frame.pack(side=LEFT, fill=Y, padx=(10, 0))
+
 
         Label(status_info_frame, text="Status da Produção", bg="#121212", fg="#e6edf3",
             font=("Segoe UI", 14, "bold")).pack(anchor="w")
@@ -130,7 +139,6 @@ class InterfaceControlador:
         self.x_feeder, self.x_filler, self.x_packer = 200, 500, 800
         self.y_base, self.y_mixer = 300, 100
 
-        # Desenha as máquinas
         for name, x, y in [
             ("feeder", self.x_feeder, self.y_base),
             ("filler", self.x_filler, self.y_base),
@@ -141,15 +149,19 @@ class InterfaceControlador:
 
         self.atualizar_status_prod()
 
+    def carregar_imagem_redimensionada(self, path, width=200, height=160):
+        img = Image.open(path)
+        img = img.resize((width, height), Image.LANCZOS)
+        return ImageTk.PhotoImage(img)
+
 
     def desenhar_maquina(self, name, x, y):
-        rect = self.canvas.create_rectangle(x-60, y-40, x+60, y+40,
-                                            fill="#1f2937", outline="#3f3f46", width=2)
-        text = self.canvas.create_text(x, y, text=name.upper(),
+        img_maq = self.canvas.create_image(x,y,image=self.maquinas_imagens[name])
+        text = self.canvas.create_text(x, y+80, text=name.upper(),
                                        fill="#e6edf3", font=("Segoe UI", 11, "bold"))
         light = self.canvas.create_oval(x+40, y-60, x+60, y-40, fill="#27272a", outline="")
         setattr(self, f"{name}_light", light)
-        setattr(self, f"{name}_rect", rect)
+        setattr(self,f"{name}",img_maq)
         setattr(self, f"{name}_text", text)
 
     def ouvir_Mensagens_servidor(self, msg):
@@ -201,8 +213,8 @@ class InterfaceControlador:
             self.atualizar_status_prod()
             x = self.x_filler
             y = self.y_mixer + 40
-            drop = self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5,
-                                        fill="#05c535", outline="")
+            drop = self.canvas.create_oval(x - 10, y - 10, x + 10, y + 10,
+                                        fill="#c27e26", outline="")
             self.gotas.append({"id": drop, "x": x, "y": y})
 
     def atualizar_status_prod(self):
@@ -241,17 +253,13 @@ class InterfaceControlador:
         self.root.after(0, criar_Garrafa)
 
     def _animacao_emergencia(self):
-        # se não está em emergência, apaga a imagem e encerra
         if not self.ta_emergencia:
             if self.alarme_widget is not None:
                 self.canvas.delete(self.alarme_widget)
                 self.alarme_widget = None
             return
         
-        
-
         if self.alarme_widget is None:
-            from tkinter import PhotoImage
             self.alarme_imagem = PhotoImage(file="assets/alarm.png").zoom(3, 3)
             self.alarme_widget = self.canvas.create_image(
                 self.x_packer + 250,
@@ -260,7 +268,7 @@ class InterfaceControlador:
             )
             self.estado_alarme_piscando = True
 
-        # alterna visibilidade (piscar)
+        #(piscar)
         self.estado_alarme_piscando = not self.estado_alarme_piscando
         self.canvas.itemconfig(
             self.alarme_widget,
@@ -276,15 +284,15 @@ class InterfaceControlador:
     def animacoes(self):
         para_remover = []
         for b in self.garrafas:
-            b["x"] += 6  
-            self.canvas.move(b["id"], 6, 0)
+            b["x"] += 12  
+            self.canvas.move(b["id"], 12, 0)
 
             # garrafa do feeder some um pouco depois do filler
             if b.get("origem") == "feeder" and b["x"] > self.x_filler:
                 para_remover.append(b)
 
             # garrafa do filler some um pouco depois do packer
-            elif b.get("origem") == "filler" and b["x"] > self.x_packer + 10:
+            elif b.get("origem") == "filler" and b["x"] > self.x_packer :
                 para_remover.append(b)
 
         for b in para_remover:
@@ -306,8 +314,8 @@ class InterfaceControlador:
             x, y = d["x"], d["y"]
             self.canvas.delete(d["id"])
             self.gotas.remove(d)
-            splash = self.canvas.create_oval(x - 8, y - 4, x + 8, y + 4,
-                                            fill="#05c535", outline="")
+            splash = self.canvas.create_oval(x - 20, y - 10, x + 20, y + 10,
+                                            fill="#c27e26", outline="")
             self.root.after(200, lambda s=splash: self.canvas.delete(s))
 
 
@@ -322,41 +330,23 @@ class InterfaceControlador:
             fade_out()
 
         if self.para_Empacotar:
-            (x, y) = (self.x_packer, self.y_base - 40)
             self.para_Empacotar.pop()
+            base_x = self.x_packer + 120  
+            base_y = self.y_base - 40
 
-            # 🔸 Carregar imagem do pacote só uma vez
-            if not hasattr(self, "images"):
-                self.images = {}
+            CAIXAS_POR_LINHA = 5
 
-            if "package" not in self.images:
-                self.images["package"] = PhotoImage(file="assets\pacote.png")
+            indice = len(self.caixas)
+            linha = indice // CAIXAS_POR_LINHA
+            coluna = indice % CAIXAS_POR_LINHA
 
-            base_img = self.images["package"]
+            x = base_x + (coluna * 35)
+            y = base_y + (linha * 40)
 
-            def expandir_imagem(scale=1.0):
-                if scale < 1.5:
-                    zoom_factor = int(scale * 10)
-                    img_scaled = base_img.zoom(zoom_factor).subsample(10)
-                    img_id = self.canvas.create_image(x, y, image=img_scaled)
-                    self._current_pkg_img = img_scaled
+            caixa_id = self.canvas.create_image(x, y, image=self.caixa_img, anchor="s")
 
-                    self.root.after(80, lambda: (
-                        self.canvas.delete(img_id),
-                        expandir_imagem(scale + 0.5)
-                    ))
-                else:
-                    img_id = self.canvas.create_image(x, y, image=base_img)
-                    self._current_pkg_img = base_img
-                    self.root.after(600, lambda: fade_out(img_id))
+            self.caixas.append({"id": caixa_id, "x": x, "y": y})
 
-            def fade_out(img_id):
-                try:
-                    self.canvas.delete(img_id)
-                except TclError:
-                    pass
-
-            expandir_imagem()
 
 
     def _loop_atualizar(self):
@@ -372,7 +362,7 @@ class InterfaceControlador:
             self.canvas.itemconfig(getattr(self, f"{"feeder"}_light"), fill="#22c55e")
 
     def _repor_feeder(self):
-        quantidade = 10  #10 por padrão
+        quantidade = 10 
         self.controlador.enviar_comando("feeder", "REPOR", quantidade=quantidade)
         self._log(f"Enviado comando: FEEDER → REPOR ({quantidade} garrafas)")
 
